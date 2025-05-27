@@ -1,4 +1,3 @@
-// Import necessary modules
 import OpenAI from 'openai';
 import readline from 'readline';
 import dotenv from 'dotenv';
@@ -6,7 +5,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
+    apiKey: process.env.OPENAI_API_KEY as string,
 });
 
 const rl = readline.createInterface({
@@ -14,14 +13,19 @@ const rl = readline.createInterface({
     output: process.stdout,
 });
 
-let conversationHistory = [{
+type Message = {
+    role: 'system' | 'user' | 'assistant';
+    content: string;
+};
+
+let conversationHistory: Message[] = [{
     role: 'system', // A system message helps guide the AI's behavior
     content: 'You are a helpful AI assistant. Be concise and polite.',
 }];
 
-async function startChat() {
+async function startChat(): Promise<void> {
     // Prompt the user for their input.
-    rl.question('\nYou: ', async (userInput) => {
+    rl.question('\nYou: ', async (userInput: string) => {
         
         if (userInput.toLowerCase() === 'exit' || userInput.toLowerCase() === 'quit') {
             console.log('Goodbye! Thanks for chatting.');
@@ -37,6 +41,7 @@ async function startChat() {
         process.stdout.write('AI: ');
 
         let fullAiResponse = '';
+        let gotChunk = false;
 
         try {
             const stream = await openai.chat.completions.create({
@@ -45,11 +50,21 @@ async function startChat() {
                 stream: true,
             });
 
-            for await (const chunk of stream) {
-                
+            for await (const chunk of stream as any) {
                 const content = chunk.choices[0]?.delta?.content || '';
-                process.stdout.write(content);
-                fullAiResponse += content;
+                if (content) {
+                    process.stdout.write(content);
+                    fullAiResponse += content;
+                    gotChunk = true;
+                }
+            }
+
+            // Always print a newline after the AI response
+            process.stdout.write('\n');
+
+            // Optionally, handle the case where nothing was streamed
+            if (!gotChunk) {
+                process.stdout.write('[No response received]\n');
             }
 
             conversationHistory.push({
@@ -57,7 +72,7 @@ async function startChat() {
                 content: fullAiResponse,
             });
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('\nError during API call:', error.message);
             conversationHistory.pop();
         }
